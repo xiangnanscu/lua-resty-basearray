@@ -52,6 +52,23 @@ local function resolve_index(self, index, is_end, no_max)
 end
 
 local function setup(array)
+  -- {1,2} + {2,3} = {1,2,2,3}
+  function array.__add(self, o)
+    return array.concat(self, o)
+  end
+
+  -- {1,2} - {2,3} = {1}
+  function array.__sub(self, o)
+    local res = setmetatable({}, array)
+    local od = o:as_set()
+    for i = 1, #self do
+      if not od[self[i]] then
+        res[#res + 1] = self[i]
+      end
+    end
+    return res
+  end
+
   function array.concat(...)
     local n = 0
     local m = select("#", ...)
@@ -187,12 +204,22 @@ local function setup(array)
 
   function array.group_by(self, callback)
     local res = {}
-    for i = 1, #self do
-      local key = callback(self[i], i, self)
-      if not res[key] then
-        res[key] = setmetatable({}, array)
+    if type(callback) == 'function' then
+      for i = 1, #self do
+        local k = callback(self[i], i, self)
+        if not res[k] then
+          res[k] = setmetatable({}, array)
+        end
+        res[k][#res[k] + 1] = self[i]
       end
-      res[key][#res[key] + 1] = self[i]
+    else
+      for i = 1, #self do
+        local k = self[i][callback]
+        if not res[k] then
+          res[k] = setmetatable({}, array)
+        end
+        res[k][#res[k] + 1] = self[i]
+      end
     end
     return res
   end
@@ -357,18 +384,6 @@ local function setup(array)
 
   -- other methods
 
-  function array.group_by_key(self, key)
-    local res = {}
-    for i = 1, #self do
-      local k = self[i][key]
-      if not res[k] then
-        res[k] = setmetatable({}, array)
-      end
-      res[k][#res[k] + 1] = self[i]
-    end
-    return res
-  end
-
   function array.map_key(self, key)
     local n = #self
     local res = setmetatable(table_new(n, 0), array)
@@ -418,6 +433,8 @@ local function setup(array)
     return res
   end
 
+  array.duplicates = array.dups
+
   function array.dup_map(self, callback)
     local already = {}
     for i = 1, #self do
@@ -430,6 +447,8 @@ local function setup(array)
       end
     end
   end
+
+  array.duplicate_map = array.dup_map
 
   function array.dups_map(self, callback)
     local already = {}
@@ -451,6 +470,8 @@ local function setup(array)
     return res
   end
 
+  array.duplicates_map = array.dups_map
+
   function array.uniq(self)
     local already = {}
     local res = setmetatable({}, array)
@@ -463,6 +484,8 @@ local function setup(array)
     end
     return res
   end
+
+  array.unique = array.uniq
 
   function array.uniq_map(self, callback)
     local already = {}
@@ -477,6 +500,8 @@ local function setup(array)
     return res
   end
 
+  array.unique_map = array.uniq_map
+
   function array.as_set(self)
     local res = table_new(0, #self)
     for i = 1, #self do
@@ -485,91 +510,79 @@ local function setup(array)
     return res
   end
 
-  function array.equals(self, o)
-    if type(o) ~= 'table' or #o ~= #self then
-      return false
-    end
-    for i = 1, #self do
-      local tt, ot = type(self[i]), type(o[i])
-      if tt ~= ot then
-        return false
-      elseif tt ~= 'table' then
-        if self[i] ~= o[i] then
-          return false
-        end
-      elseif not array.equals(self[i], o[i]) then
-        return false
-      end
-    end
-    return true
-  end
-
-  -- {1,2} == {1,2}
-  array.__eq = array.equals
-  -- {1,2} + {2,3} = {1,2,2,3}
-  function array.__add(self, o)
-    return array.concat(self, o)
-  end
-
-  -- {1,2} - {2,3} = {1}
-  function array.__sub(self, o)
-    local res = setmetatable({}, array)
-    local od = o:as_set()
-    for i = 1, #self do
-      if not od[self[i]] then
-        res[#res + 1] = self[i]
-      end
-    end
-    return res
-  end
-
   function array.exclude(self, callback)
     local res = setmetatable({}, array)
-    for i = 1, #self do
-      if not callback(self[i], i, self) then
-        res[#res + 1] = self[i]
+    if type(callback) == 'function' then
+      for i = 1, #self do
+        if not callback(self[i], i, self) then
+          res[#res + 1] = self[i]
+        end
+      end
+    else
+      for i = 1, #self do
+        if self[i] ~= callback then
+          res[#res + 1] = self[i]
+        end
       end
     end
     return res
   end
 
   function array.count(self, callback)
-    local res = 0
-    for i = 1, #self do
-      if callback(self[i], i, self) then
-        res = res + 1
+    local cnt = 0
+    if type(callback) == 'function' then
+      for i = 1, #self do
+        if callback(self[i], i, self) then
+          cnt = cnt + 1
+        end
+      end
+    else
+      for i = 1, #self do
+        if self[i] == callback then
+          cnt = cnt + 1
+        end
       end
     end
-    return res
+    return cnt
   end
 
   function array.count_exclude(self, callback)
-    local res = 0
-    for i = 1, #self do
-      if not callback(self[i], i, self) then
-        res = res + 1
+    local cnt = 0
+    if type(callback) == 'function' then
+      for i = 1, #self do
+        if not callback(self[i], i, self) then
+          cnt = cnt + 1
+        end
+      end
+    else
+      for i = 1, #self do
+        if self[i] ~= callback then
+          cnt = cnt + 1
+        end
       end
     end
-    return res
+    return cnt
   end
 
   function array.combine(self, n)
     if #self == n then
-      return array { self }
+      return setmetatable({ self }, array)
     elseif n == 1 then
       return array.map(self, function(e)
-        return array { e }
+        return setmetatable({ e }, array)
       end)
     elseif #self > n then
       local head = self[1]
       local rest = array.slice(self, 2)
       return array.concat(array.combine(rest, n), array.combine(rest, n - 1):map(function(e)
-        return array { head, unpack(e) }
+        return setmetatable({ head, unpack(e) }, array)
       end))
     else
-      return array {}
+      return setmetatable({}, array)
     end
   end
+
+  return array
 end
 
 
