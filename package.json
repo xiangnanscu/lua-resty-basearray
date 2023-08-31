@@ -1,8 +1,6 @@
 {
-  "name": "lua-resty-array",
+  "name": "lua-resty-basearray",
   "version": "1.0.0",
-  "description": "lua array inspired by javascript array",
-  "main": "index.js",
   "scripts": {
     "release": "opm upload && opm clean dist",
     "commit": "git add . && git commit -am ",
